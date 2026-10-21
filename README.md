@@ -1,2 +1,9 @@
 # IT-Asset-Management
-IT Asset Management, Python
+Language: Python
+IDE: PyCharm
+
+User roles
+Asset Manager - Win
+Employee - Franklin
+Auditor - Rohit
+System Administrator - Tino
