@@ -27,4 +27,4 @@ The system works with four user roles.
 | Asset Manager | Win | Manage IT asset records, assign, return assets, lifecycle information and asset disposition. |
 | Employee | Franklin | View assigned assets, acknowledge asset assignment, provide information concerning asset returns. |
 | Auditor | Rohit | Review asset records, comply with the compliance requirements, identify discrepancies and prepare audits. |
-| System Administrator | Tino | System administration and configurations.
+| System Administrator | Tino | Manage system configurations, user roles, and administration.
