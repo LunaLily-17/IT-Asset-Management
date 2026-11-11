@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
-# ---------------- US 20: User Accounts ----------------
+#user account management
 
 class AccountStatus(str, Enum):
     ACTIVE = "active"
@@ -34,7 +34,7 @@ class UserResponse(BaseModel):
     status: AccountStatus
 
 
-# ---------------- US 21: Roles and Permissions ----------------
+#roles and permissions management
 
 class Role(str, Enum):
     ASSET_MANAGER = "Asset Manager"
@@ -57,7 +57,7 @@ class RoleResponse(BaseModel):
     permissions: list[str]
 
 
-# ---------------- US 22: Asset Categories ----------------
+#asset category and reference data management
 
 class AssetCategoryCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)

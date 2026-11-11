@@ -1,4 +1,4 @@
-# ---------------- US 20: User Accounts ----------------
+#user accounts
 
 users = {
     1: {
@@ -42,7 +42,7 @@ users = {
 next_user_id = 5
 
 
-# ---------------- US 21: Roles and Permissions ----------------
+#roles and permissions
 
 user_roles = {
     1: ["Asset Manager"],
@@ -78,7 +78,7 @@ role_permissions = {
 }
 
 
-# ---------------- US 22: Asset Categories ----------------
+#asset categories and reference values
 
 asset_categories = {
     1: {

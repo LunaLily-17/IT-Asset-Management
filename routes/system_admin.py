@@ -18,9 +18,7 @@ router = APIRouter(
 )
 
 
-# =====================================================
-# US 20: USER ACCOUNT MANAGEMENT
-# =====================================================
+#user management
 
 @router.post("/users", status_code=201)
 def create_user(data: UserCreate):
@@ -47,9 +45,7 @@ def deactivate_user(user_id: int):
     return service.deactivate_user(user_id)
 
 
-# =====================================================
-# US 21: ROLE AND PERMISSION MANAGEMENT
-# =====================================================
+#roles and permissions management
 
 @router.get("/roles")
 def get_all_roles():
@@ -74,9 +70,7 @@ def update_role_permissions(role_id: str, data: PermissionUpdate):
     )
 
 
-# =====================================================
-# US 22: ASSET CATEGORY AND REFERENCE DATA MANAGEMENT
-# =====================================================
+#asset categories and reference values management
 
 @router.get("/reference-data/asset-categories")
 def get_asset_categories():
