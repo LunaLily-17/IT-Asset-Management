@@ -2,10 +2,7 @@ from fastapi import HTTPException
 
 from database import memory
 
-
-# =====================================================
-# US 20: CREATE AND MANAGE USER ACCOUNTS
-# =====================================================
+#create and manage user accounts
 
 def create_user(data):
     global_user_id = memory.next_user_id
@@ -71,9 +68,7 @@ def deactivate_user(user_id):
     }
 
 
-# =====================================================
-# US 21: ASSIGN ROLES AND CONFIGURE PERMISSIONS
-# =====================================================
+#assign roles and permissions
 
 def get_all_roles():
     return [
@@ -145,9 +140,7 @@ def update_role_permissions(role_id, permissions):
     }
 
 
-# =====================================================
-# US 22: CONFIGURE ASSET CATEGORIES AND REFERENCE VALUES
-# =====================================================
+#configure asset categories and reference values
 
 def get_asset_categories():
     return list(memory.asset_categories.values())
