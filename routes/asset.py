@@ -1,15 +1,28 @@
+import os
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Query, status, Response
+from fastapi import APIRouter, Body, HTTPException, Query, status, Response, Depends, Request
 
-from models.asset_request import AssetRegistrationRequest, AssetRegistrationResponse
+from models.asset_request import (
+    AssetRegistrationRequest,
+    AssetRegistrationResponse,
+    AssetAssignmentRequest,
+    AssetAssignmentResponse,
+)
 from models.asset_search import InventoryAssetResponse
 from services.asset_service import (
     DuplicateAssetIdentifierError,
     get_asset,
     search_assets,
     register_asset,
+    assign_asset,
+    get_current_asset_assignment,
+    AssetAssignmentNotFound,
+    AssetAssignmentConflict,
+    EmployeeNotEligible,
+    EmployeeNotFound,
 )
+
 
 router = APIRouter(prefix="/assets", tags=["Assets"])
 
@@ -70,3 +83,103 @@ def get_asset_by_id(asset_id: str):
     if asset is None:
         raise HTTPException(status_code=404, detail="Asset not found")
     return asset
+
+
+def get_current_asset_manager(request: Request) -> str:
+    """
+    Authentication integration point.
+
+    The future Authentication/ABAC implementation
+    will provide a verified user through request.state.user.
+    """
+
+    user = getattr(request.state, "user", None)
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+        )
+
+    if user.get("role") != "Asset Manager":
+        raise HTTPException(
+            status_code=403,
+            detail="Asset Manager role required",
+        )
+
+    user_id = user.get("user_id")
+
+    if not user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authenticated identity",
+        )
+
+    return user_id
+
+
+@router.post(
+    "/{asset_id}/assign",
+    response_model=AssetAssignmentResponse,
+    status_code=201,
+    summary="Assign an available asset to an employee",
+    responses={
+        401: {"description": "Authentication required"},
+        403: {"description": "Asset Manager access required"},
+        404: {"description": "Asset or employee not found"},
+        409: {"description": "Assignment conflict"},
+        422: {"description": "Invalid assignment details"},
+    },
+)
+def create_asset_assignment(
+    asset_id: str,
+    request: AssetAssignmentRequest,
+    assigned_by: str = Depends(get_current_asset_manager),
+):
+    try:
+        return assign_asset(
+            asset_id=asset_id,
+            request=request,
+            assigned_by=assigned_by,
+        )
+
+    except (AssetAssignmentNotFound, EmployeeNotFound) as exc:
+        raise HTTPException(
+            status_code=404, detail=str(exc)
+        ) from exc
+
+    except (
+        AssetAssignmentConflict,
+        EmployeeNotEligible,
+    ) as exc:
+        raise HTTPException(
+            status_code=409, detail=str(exc)
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=str(exc)
+        ) from exc
+
+
+@router.get(
+    "/{asset_id}/assignment",
+    response_model=AssetAssignmentResponse,
+    summary="Retrieve the current active asset assignment",
+    responses={
+        401: {"description": "Authentication required"},
+        403: {"description": "Asset Manager access required"},
+        404: {"description": "Active assignment not found"},
+    },
+)
+def get_asset_assignment(
+    asset_id: str,
+    assigned_by: str = Depends(get_current_asset_manager),
+):
+    try:
+        return get_current_asset_assignment(asset_id)
+
+    except AssetAssignmentNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=str(exc)
+        ) from exc

@@ -1,9 +1,12 @@
-
 from uuid import uuid4
-
 from database import db_json
 from models.asset_request import HardwareRegistrationRequest, SoftwareRegistrationRequest
 from models.asset_schema import HardwareAsset, SoftwareAsset
+from copy import deepcopy
+from datetime import datetime, timezone
+from models.asset_request import AssetAssignmentRequest
+from models.asset_schema import AssetAssignment
+
 
 
 class DuplicateAssetIdentifierError(Exception):
@@ -156,3 +159,190 @@ def search_assets(
 
     matches.sort(key=lambda item: item["asset_id"])
     return matches[offset:offset + limit], len(matches)
+
+
+class AssetAssignmentNotFound(Exception):
+    pass
+
+
+class EmployeeNotFound(Exception):
+    pass
+
+
+class AssetAssignmentConflict(Exception):
+    pass
+
+
+class EmployeeNotEligible(Exception):
+    pass
+
+
+def find_assignment_asset(asset_id: str):
+    for collection in (
+        "hardware_assets",
+        "software_assets",
+    ):
+        asset = db_json.DB[collection].get(asset_id)
+
+        if asset is not None:
+            return asset
+
+    return None
+
+
+def find_active_assignment(asset_id: str):
+    for assignment in db_json.DB[
+        "asset_assignments"
+    ].values():
+        if (
+            assignment["asset_id"] == asset_id
+            and assignment["status"] == "Active"
+        ):
+            return assignment
+
+    return None
+
+
+def assign_asset(
+    asset_id: str,
+    request: AssetAssignmentRequest,
+    assigned_by: str,
+):
+    if not assigned_by or not assigned_by.strip():
+        raise PermissionError(
+            "Authenticated Asset Manager is required"
+        )
+
+    with db_json.DB_LOCK:
+        asset = find_assignment_asset(asset_id)
+
+        if asset is None:
+            raise AssetAssignmentNotFound(
+                "Asset not found"
+            )
+
+        employee = db_json.DB["employees"].get(
+            request.employee_id
+        )
+
+        if employee is None:
+            raise EmployeeNotFound(
+                "Employee not found"
+            )
+
+        if employee.get("status") != "Active":
+            raise EmployeeNotEligible(
+                "Employee is not eligible for assignment"
+            )
+
+        if (
+            asset.get("status") != "Available"
+            or asset.get("assigned_employee_id") is not None
+            or find_active_assignment(asset_id) is not None
+        ):
+            raise AssetAssignmentConflict(
+                "Asset is unavailable or already assigned"
+            )
+
+        now = datetime.now(timezone.utc)
+        start_date = request.assignment_date or now.date()
+
+        if (
+            request.due_date is not None
+            and request.due_date < start_date
+        ):
+            raise ValueError(
+                "Due date cannot precede assignment date"
+            )
+
+        assignment_id = f"ASG-{uuid4().hex.upper()}"
+        audit_id = f"AUD-{uuid4().hex.upper()}"
+
+        assignment = AssetAssignment(
+            assignment_id=assignment_id,
+            asset_id=asset_id,
+            employee_id=request.employee_id,
+            assignment_date=start_date.isoformat(),
+            due_date=(
+                request.due_date.isoformat()
+                if request.due_date else None
+            ),
+            condition_at_handover=(
+                request.condition_at_handover
+            ),
+            notes=request.notes,
+            status="Active",
+            assigned_by=assigned_by,
+            created_at=now.isoformat(),
+        ).to_dict()
+
+        # Preserve previous values for rollback.
+        previous_asset = deepcopy(asset)
+
+        previous_assignments = deepcopy(
+            db_json.DB["asset_assignments"]
+        )
+        previous_audit = deepcopy(
+            db_json.DB["audit_logs"]
+        )
+
+        try:
+            db_json.DB[
+                "asset_assignments"
+            ][assignment_id] = assignment
+
+            asset["status"] = "Assigned"
+            asset["assigned_employee_id"] = (
+                request.employee_id
+            )
+            asset["updated_at"] = now.isoformat()
+
+            db_json.DB["audit_logs"][audit_id] = {
+                "audit_id": audit_id,
+                "event_type": "ASSET_ASSIGNED",
+                "asset_id": asset_id,
+                "assignment_id": assignment_id,
+                "employee_id": request.employee_id,
+                "performed_by": assigned_by,
+                "timestamp": now.isoformat(),
+            }
+
+            db_json.save_db()
+
+        except Exception:
+            # Restore in-memory state if saving fails.
+            asset.clear()
+            asset.update(previous_asset)
+
+            db_json.DB["asset_assignments"].clear()
+            db_json.DB["asset_assignments"].update(
+                previous_assignments
+            )
+
+            db_json.DB["audit_logs"].clear()
+            db_json.DB["audit_logs"].update(
+                previous_audit
+            )
+
+            raise
+
+        return assignment
+
+
+def get_current_asset_assignment(asset_id: str):
+    with db_json.DB_LOCK:
+        asset = find_assignment_asset(asset_id)
+
+        if asset is None:
+            raise AssetAssignmentNotFound(
+                "Asset not found"
+            )
+
+        assignment = find_active_assignment(asset_id)
+
+        if assignment is None:
+            raise AssetAssignmentNotFound(
+                "No active assignment found"
+            )
+
+        return deepcopy(assignment)

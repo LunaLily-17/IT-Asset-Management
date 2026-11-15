@@ -4,7 +4,14 @@ from pathlib import Path
 from threading import RLock
 
 DB_FILE_PATH = Path(__file__).resolve().parent / "itam_db.json"
-COLLECTIONS = ("hardware_assets", "software_assets", "software_licences", "asset_retirements")
+COLLECTIONS = (
+    "hardware_assets",
+    "software_assets",
+    "software_licences",
+    "asset_retirements",
+    "employees",
+    "asset_assignments",
+    "audit_logs")
 DB: dict = {name: {} for name in COLLECTIONS}
 DB_LOCK = RLock()  # protects this process only, not multiple server workers
 

@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
-
+from typing import Optional
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -49,3 +49,22 @@ class SoftwareAsset(BaseAsset):
     product: str
     version: str
     installation_id: str
+
+@dataclass
+class AssetAssignment:
+    assignment_id: str
+    asset_id: str
+    employee_id: str
+
+    assignment_date: str
+    due_date: Optional[str]
+
+    condition_at_handover: Optional[str]
+    notes: Optional[str]
+
+    status: str
+    assigned_by: str
+    created_at: str
+
+    def to_dict(self):
+        return asdict(self)

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -51,6 +51,36 @@ class SoftwareRegistrationRequest(BaseRegistrationRequest):
     version: NonBlank
     installation_id: NonBlank
 
+class AssetAssignmentRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    employee_id: str = Field(min_length=1)
+    assignment_date: date | None = None
+    due_date: date | None = None
+
+    condition_at_handover: str | None = Field(
+        default=None, max_length=500
+    )
+    notes: str | None = Field(
+        default=None, max_length=2000
+    )
+
+    @model_validator(mode="after")
+    def validate_assignment_dates(self):
+        start = (
+            self.assignment_date
+            or datetime.now(timezone.utc).date()
+        )
+
+        if self.due_date and self.due_date < start:
+            raise ValueError(
+                "Due date cannot be before assignment date"
+            )
+
+        return self
 
 AssetRegistrationRequest = Annotated[
     Union[HardwareRegistrationRequest, SoftwareRegistrationRequest],
@@ -90,6 +120,19 @@ class SoftwareAssetResponse(BaseAssetResponse):
     version: str
     installation_id: str
 
+class AssetAssignmentResponse(BaseModel):
+    assignment_id: str
+    asset_id: str
+    employee_id: str
+    assignment_date: date
+    due_date: date | None = None
+
+    condition_at_handover: str | None = None
+    notes: str | None = None
+
+    status: Literal["Active"]
+    assigned_by: str
+    created_at: datetime
 
 AssetRegistrationResponse = Annotated[
     Union[HardwareAssetResponse, SoftwareAssetResponse],
