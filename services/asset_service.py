@@ -1,4 +1,4 @@
-"""Registration rules for both asset categories in one service file."""
+
 from uuid import uuid4
 
 from database import db_json
@@ -98,3 +98,61 @@ def list_assets(category: str | None = None) -> list[dict]:
         if category == "Software":
             return list(db_json.DB["software_assets"].values())
         return list(db_json.DB["hardware_assets"].values()) + list(db_json.DB["software_assets"].values())
+
+
+
+def search_assets(
+    *,
+    category: str | None = None,
+    status: str | None = None,
+    location: str | None = None,
+    manufacturer: str | None = None,
+    model: str | None = None,
+    search: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """AND filters; case-insensitive substring text matching; sorted, paginated snapshot.
+
+    manufacturer/model apply only to hardware. The free-text search covers
+    non-secret inventory metadata and identifiers in both asset categories.
+    No mutation and no calls to save_db occur here.
+    """
+    def contains(value: object, needle: str | None) -> bool:
+        return needle is None or needle.casefold() in str(value or "").casefold()
+
+    with db_json.DB_LOCK:
+        records = [
+            record.copy()  # never expose mutable DB dictionaries
+            for collection_name in ("hardware_assets", "software_assets")
+            for record in db_json.DB[collection_name].values()
+        ]
+
+    matches: list[dict] = []
+    for record in records:
+        if category is not None and record.get("category") != category:
+            continue
+        if status is not None and str(record.get("status", "")).casefold() != status.casefold():
+            continue
+        if not contains(record.get("location"), location):
+            continue
+        if manufacturer is not None and (
+            record.get("category") != "Hardware" or not contains(record.get("manufacturer"), manufacturer)
+        ):
+            continue
+        if model is not None and (
+            record.get("category") != "Hardware" or not contains(record.get("model"), model)
+        ):
+            continue
+        if search is not None:
+            fields = (
+                "asset_id", "title", "asset_type", "location", "manufacturer",
+                "model", "serial_number", "unique_identifier", "vendor",
+                "product", "version", "installation_id",
+            )
+            if not any(contains(record.get(field), search) for field in fields):
+                continue
+        matches.append(record)
+
+    matches.sort(key=lambda item: item["asset_id"])
+    return matches[offset:offset + limit], len(matches)
