@@ -2,7 +2,7 @@ import pytest
 from database import db_json
 
 
-# TC20 - Purchase Cost Boundary Value Analysis
+# TC13 - Purchase Cost Boundary Value Analysis
 # Purpose: Verify validation at and around the minimum cost.
 # Technique: Black-box / Boundary Value Analysis
 # Boundary: Cost must be >= 0.
@@ -30,12 +30,12 @@ def test_purchase_cost_boundary(
     assert response.status_code == expected_status
 
     if expected_status == 422:
-        assert db_json.DB["hardware_assets"] == {}
+        assert db_json.DB["assets"] == {}
     else:
-        assert len(db_json.DB["hardware_assets"]) == 1
+        assert len(db_json.DB["assets"]) == 1
 
 
-# TC23 - Asset Title Length Boundary Value Analysis
+# TC14 - Asset Title Length Boundary Value Analysis
 # Purpose: Verify the minimum valid asset title length.
 # Technique: Black-box / Boundary Value Analysis
 # Boundary: Title must contain at least one non-space character.
@@ -65,6 +65,6 @@ def test_asset_title_boundary(
     assert response.status_code == expected_status
 
     if expected_status == 422:
-        assert db_json.DB["hardware_assets"] == {}
+        assert db_json.DB["assets"] == {}
     else:
-        assert len(db_json.DB["hardware_assets"]) == 1
+        assert len(db_json.DB["assets"]) == 1

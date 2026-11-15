@@ -1,60 +1,45 @@
-
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any
+from threading import RLock
+
+DB_FILE_PATH = Path(__file__).resolve().parent / "itam_db.json"
+COLLECTIONS = ("hardware_assets", "software_assets", "software_licences", "asset_retirements")
+DB: dict = {name: {} for name in COLLECTIONS}
+DB_LOCK = RLock()  # protects this process only, not multiple server workers
 
 
-DB_FILE_PATH = (
-    Path(__file__).resolve().parent / "itam_db.json"
-)
-
-DB: Dict[str, Any] = {
-    "hardware_assets": {},
-    "software_licences": {},
-    "asset_retirements": {}
-}
-
-
-def load_db() -> Dict[str, Any]:
-    """Load saved data into the shared dictionary."""
-
-    if os.path.exists(DB_FILE_PATH):
-        with open(DB_FILE_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if not isinstance(data, dict):
-            raise ValueError("Invalid database structure")
-
-        DB.clear()
-        DB.update(data)
-
-        DB.setdefault("hardware_assets", {})
-        DB.setdefault("software_licences", {})
-        DB.setdefault("asset_retirements", {})
-    else:
-        save_db()
-
-    return DB
+def load_db() -> dict:
+    with DB_LOCK:
+        path = Path(DB_FILE_PATH)
+        if path.exists():
+            with path.open("r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if not isinstance(loaded, dict):
+                raise ValueError("Database root must be an object")
+            for collection in COLLECTIONS:
+                loaded.setdefault(collection, {})
+                if not isinstance(loaded[collection], dict):
+                    raise ValueError(f"Database collection {collection} must be an object")
+            DB.clear()
+            DB.update(loaded)
+        else:
+            DB.clear()
+            DB.update({name: {} for name in COLLECTIONS})
+            save_db()
+        return DB
 
 
-def save_db():
-    """Persist the shared database to JSON."""
-
-    path = Path(DB_FILE_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write to a temporary file before replacing
-    temp_path = path.with_name(path.name + ".tmp")
-
-    try:
-        with open(temp_path, "w", encoding="utf-8") as f:
-            json.dump(DB, f, indent=2, allow_nan=False)
-            f.flush()
-            os.fsync(f.fileno())
-
-        os.replace(temp_path, path)
-
-    finally:
-        if temp_path.exists():
-            temp_path.unlink()
+def save_db() -> None:
+    with DB_LOCK:
+        path = Path(DB_FILE_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + ".tmp")
+        try:
+            with temporary.open("w", encoding="utf-8") as handle:
+                json.dump(DB, handle, indent=2, allow_nan=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)

@@ -1,42 +1,51 @@
-
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from typing import Optional
+from dataclasses import asdict, dataclass, field
+from datetime import date, datetime, timezone
 
 
-@dataclass
-class HardwareAsset:
-    hardware_id: str
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass(kw_only=True)
+class BaseAsset:
+    asset_id: str
     title: str
-    product: Optional[str] = None
+    category: str
+    asset_type: str
+    location: str
+    status: str
+    purchase_date: date | None = None
+    supplier: str | None = None
+    cost: float | None = None
+    assigned_employee_id: None = None
+    created_at: str = field(default_factory=utc_now)
+    updated_at: str = field(default_factory=utc_now)
 
-    category: str = "Physical"
-    asset_type: str = "Other"
-    manufacturer: Optional[str] = None
-    serial_number: Optional[str] = None
-    unique_identifier: Optional[str] = None
+    def to_dict(self) -> dict:
+        record = asdict(self)
+        if record["purchase_date"] is not None:
+            record["purchase_date"] = record["purchase_date"].isoformat()
+        return record
 
-    location: str = "Headquarters"
-    status: str = "Available"
 
-    purchase_date: Optional[str] = None
-    supplier: Optional[str] = None
-    cost: Optional[float] = None
-    warranty_expiry: Optional[str] = None
+@dataclass(kw_only=True)
+class HardwareAsset(BaseAsset):
+    manufacturer: str | None = None
+    model: str | None = None
+    serial_number: str | None = None
+    unique_identifier: str | None = None
+    warranty_expiry: date | None = None
 
-    assigned_employee_id: Optional[str] = None
-    department: str = "General"
+    def to_dict(self) -> dict:
+        record = super().to_dict()
+        if record["warranty_expiry"] is not None:
+            record["warranty_expiry"] = record["warranty_expiry"].isoformat()
+        return record
 
-    created_at: str = field(
-        default_factory=lambda: datetime.now(
-            timezone.utc
-        ).isoformat()
-    )
-    updated_at: str = field(
-        default_factory=lambda: datetime.now(
-            timezone.utc
-        ).isoformat()
-    )
 
-    def to_dict(self):
-        return asdict(self)
+@dataclass(kw_only=True)
+class SoftwareAsset(BaseAsset):
+    vendor: str
+    product: str
+    version: str
+    installation_id: str

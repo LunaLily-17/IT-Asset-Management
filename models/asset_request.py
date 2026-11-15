@@ -1,133 +1,97 @@
-
 from datetime import date
-from enum import Enum
-from typing import Optional
+from typing import Annotated, Literal, Union
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    model_validator
-)
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
-class AssetCategory(str, Enum):
-    PHYSICAL = "Physical"
-    VIRTUAL = "Virtual"
-
-
-class HardwareType(str, Enum):
-    LAPTOP = "Laptop"
-    DESKTOP = "Desktop"
-    SERVER = "Server"
-    PRINTER = "Printer"
-    OTHER = "Other"
-    VIRTUAL_MACHINE = "Virtual Machine"
+HARDWARE_TYPES = Literal[
+    "Laptop", "Desktop", "Server", "Printer", "Network Device",
+    "Storage Device", "Virtual Machine", "Other Hardware",
+]
+SOFTWARE_TYPES = Literal[
+    "Application", "Operating System", "Database", "Other Software",
+]
 
 
-class RegistrationStatus(str, Enum):
-    AVAILABLE = "Available"
+class BaseRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: NonBlank = Field(max_length=150)
+    location: NonBlank = Field(max_length=150)
+    status: Literal["Available"] = "Available"
+    purchase_date: date | None = None
+    supplier: NonBlank | None = None
+    cost: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
-class HardwareRegistrationRequest(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True
-    )
-
-    title: str = Field(min_length=1)
-    category: AssetCategory
-    asset_type: HardwareType
-    location: str = Field(min_length=1)
-    status: RegistrationStatus
-
-    product: Optional[str] = None
-    manufacturer: Optional[str] = None
-    serial_number: Optional[str] = None
-    unique_identifier: Optional[str] = None
-
-    purchase_date: Optional[date] = None
-    supplier: Optional[str] = None
-    cost: Optional[float] = Field(
-        default=None,
-        ge=0,
-        allow_inf_nan=False
-    )
-    warranty_expiry: Optional[date] = None
+class HardwareRegistrationRequest(BaseRegistrationRequest):
+    category: Literal["Hardware"]
+    asset_type: HARDWARE_TYPES
+    manufacturer: NonBlank | None = None
+    model: NonBlank | None = None
+    serial_number: NonBlank | None = None
+    unique_identifier: NonBlank | None = None
+    warranty_expiry: date | None = None
 
     @model_validator(mode="after")
-    def validate_asset_details(self):
-
-        physical_types = {
-            HardwareType.LAPTOP,
-            HardwareType.DESKTOP,
-            HardwareType.SERVER,
-            HardwareType.PRINTER,
-            HardwareType.OTHER
-        }
-
-        if self.category == AssetCategory.PHYSICAL:
-            if self.asset_type not in physical_types:
-                raise ValueError(
-                    "Invalid asset type for physical asset"
-                )
-
-            if not self.manufacturer:
-                raise ValueError(
-                    "Manufacturer is required for physical assets"
-                )
-
-            if not self.product:
-                raise ValueError(
-                    "Model/product is required for physical assets"
-                )
-
-            if not self.serial_number:
-                raise ValueError(
-                    "Serial number is required for physical assets"
-                )
-
-        elif self.category == AssetCategory.VIRTUAL:
-            if self.asset_type != HardwareType.VIRTUAL_MACHINE:
-                raise ValueError(
-                    "Invalid asset type for virtual asset"
-                )
-
-            if not self.unique_identifier:
-                raise ValueError(
-                    "Unique identifier is required for virtual assets"
-                )
-
-        # Optional identifiers must not be blank
-        for name in ("serial_number", "unique_identifier"):
-            value = getattr(self, name)
-            if value is not None and not value.strip():
-                raise ValueError(
-                    f"{name} cannot be blank"
-                )
-
+    def validate_hardware(self):
+        if not (self.serial_number or self.unique_identifier):
+            raise ValueError("Hardware requires serial_number or unique_identifier")
+        if self.asset_type != "Virtual Machine" and not (self.manufacturer and self.model):
+            raise ValueError("Physical hardware requires manufacturer and model")
         return self
 
 
-class HardwareRegistrationResponse(BaseModel):
-    hardware_id: str
+class SoftwareRegistrationRequest(BaseRegistrationRequest):
+    category: Literal["Software"]
+    asset_type: SOFTWARE_TYPES
+    vendor: NonBlank
+    product: NonBlank
+    version: NonBlank
+    installation_id: NonBlank
+
+
+AssetRegistrationRequest = Annotated[
+    Union[HardwareRegistrationRequest, SoftwareRegistrationRequest],
+    Field(discriminator="category"),
+]
+
+
+class BaseAssetResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    asset_id: str
     title: str
-    category: AssetCategory
-    asset_type: HardwareType
     location: str
-    status: RegistrationStatus
+    status: Literal["Available"]
+    purchase_date: date | None = None
+    supplier: str | None = None
+    cost: float | None = None
+    assigned_employee_id: None = None
+    created_at: str
+    updated_at: str
 
-    product: Optional[str] = None
-    manufacturer: Optional[str] = None
-    serial_number: Optional[str] = None
-    unique_identifier: Optional[str] = None
 
-    purchase_date: Optional[date] = None
-    supplier: Optional[str] = None
-    cost: Optional[float] = None
-    warranty_expiry: Optional[date] = None
+class HardwareAssetResponse(BaseAssetResponse):
+    category: Literal["Hardware"]
+    asset_type: HARDWARE_TYPES
+    manufacturer: str | None = None
+    model: str | None = None
+    serial_number: str | None = None
+    unique_identifier: str | None = None
+    warranty_expiry: date | None = None
 
-    assigned_employee_id: Optional[str] = None
-    department: str = "General"
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+
+class SoftwareAssetResponse(BaseAssetResponse):
+    category: Literal["Software"]
+    asset_type: SOFTWARE_TYPES
+    vendor: str
+    product: str
+    version: str
+    installation_id: str
+
+
+AssetRegistrationResponse = Annotated[
+    Union[HardwareAssetResponse, SoftwareAssetResponse],
+    Field(discriminator="category"),
+]

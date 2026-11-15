@@ -2,7 +2,7 @@ import pytest
 from database import db_json
 import json
 
-# TC16 - Unique Internal Asset ID Generation
+# TC18 - Unique Internal Asset ID Generation
 # Purpose: Verify separate registrations generate different IDs.
 # Covers: Unique internal asset ID business rule and AC1.
 # Expected: Both 201, two different hardware IDs.
@@ -18,7 +18,7 @@ def test_unique_generated_ids(client, physical_asset):
     assert len(db_json.DB["hardware_assets"]) == 2
 
 
-# TC17 - Retrieve Registered Asset
+# TC19 - Retrieve Registered Asset
 # Purpose: Verify that a newly registered asset is retrievable.
 # Covers: AC4 - Retrieval API integration.
 # Expected: HTTP 200 and correct asset details.
@@ -35,7 +35,7 @@ def test_retrieve_registered_asset(client, physical_asset):
     assert response.json()["serial_number"] == "SN-001"
 
 
-# TC18 - JSON Persistence and Reload
+# TC20 - JSON Persistence and Reload
 # Purpose: Verify successful registrations survive database reload.
 # Covers: In-memory inventory integration and AC4.
 # Expected: Saved JSON contains the asset and GET returns it
@@ -60,7 +60,7 @@ def test_json_persistence(client, physical_asset):
     assert response.json()["hardware_id"] == hardware_id
 
 
-# TC28 - Optional Purchase Details Preserved
+# TC21 - Optional Purchase Details Preserved
 # Purpose: Verify optional purchase information is correctly
 # stored and returned through the retrieval API.
 # Covers: Data integrity and AC4.

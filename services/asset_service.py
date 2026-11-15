@@ -1,102 +1,100 @@
-
+"""Registration rules for both asset categories in one service file."""
 from uuid import uuid4
 
-from database.db_json import DB, save_db
-from models.asset_schema import HardwareAsset
-from models.asset_request import HardwareRegistrationRequest
+from database import db_json
+from models.asset_request import HardwareRegistrationRequest, SoftwareRegistrationRequest
+from models.asset_schema import HardwareAsset, SoftwareAsset
 
 
-class DuplicateSerialError(Exception):
-    """Raised when an asset identifier already exists."""
+class DuplicateAssetIdentifierError(Exception):
     pass
 
 
-def normalize_identifier(value):
-    if value is None:
-        return None
-    return value.strip().casefold()
+def _normalise(value: str | None) -> str | None:
+    return value.strip().casefold() if value is not None else None
 
 
-def register_hardware(request: HardwareRegistrationRequest):
-    """Validate, register and persist a new asset."""
+def _generate_asset_id(prefix: str, collection: dict) -> str:
+    while True:
+        candidate = f"{prefix}-{uuid4().hex[:12].upper()}"
+        if candidate not in collection:
+            return candidate
 
-    assets = DB["hardware_assets"]
 
-    # Check every supplied identifier for uniqueness
-    new_identifiers = {
-        normalize_identifier(value)
-        for value in (
-            request.serial_number,
-            request.unique_identifier
-        )
-        if value is not None
-    }
-
-    for existing in assets.values():
-        existing_identifiers = {
-            normalize_identifier(value)
-            for value in (
-                existing.get("serial_number"),
-                existing.get("unique_identifier")
-            )
+def register_hardware(request: HardwareRegistrationRequest) -> dict:
+    with db_json.DB_LOCK:
+        collection = db_json.DB["hardware_assets"]
+        identifiers = {
+            _normalise(value)
+            for value in (request.serial_number, request.unique_identifier)
             if value is not None
         }
+        for existing in collection.values():
+            existing_ids = {
+                _normalise(value)
+                for value in (existing.get("serial_number"), existing.get("unique_identifier"))
+                if value is not None
+            }
+            if identifiers & existing_ids:
+                raise DuplicateAssetIdentifierError("Hardware identifier already registered")
 
-        if new_identifiers & existing_identifiers:
-            raise DuplicateSerialError(
-                "An asset with this identifier already exists"
-            )
-
-    # Server-generated ID
-    hardware_id = f"HW-{uuid4().hex.upper()}"
-
-    while hardware_id in assets:
-        hardware_id = f"HW-{uuid4().hex.upper()}"
-
-    asset = HardwareAsset(
-        hardware_id=hardware_id,
-        title=request.title,
-        product=request.product,
-        category=request.category.value,
-        asset_type=request.asset_type.value,
-        manufacturer=request.manufacturer,
-        serial_number=request.serial_number,
-        unique_identifier=request.unique_identifier,
-        location=request.location,
-        status=request.status.value,
-
-        purchase_date=(
-            request.purchase_date.isoformat()
-            if request.purchase_date else None
-        ),
-        supplier=request.supplier,
-        cost=request.cost,
-        warranty_expiry=(
-            request.warranty_expiry.isoformat()
-            if request.warranty_expiry else None
-        ),
-
-        assigned_employee_id=None
-    )
-
-    record = asset.to_dict()
-
-    # Save only after validation and duplicate checking
-    assets[hardware_id] = record
-
-    try:
-        save_db()
-    except Exception:
-        # Undo the insertion if persistence fails
-        assets.pop(hardware_id, None)
-        raise
-
-    return record
+        asset_id = _generate_asset_id("HW", collection)
+        record = HardwareAsset(
+            asset_id=asset_id,
+            **request.model_dump(),
+        ).to_dict()
+        collection[asset_id] = record
+        try:
+            db_json.save_db()
+        except Exception:
+            collection.pop(asset_id, None)
+            raise
+        return record
 
 
-def get_hardware(hardware_id: str):
-    return DB["hardware_assets"].get(hardware_id)
+def register_software(request: SoftwareRegistrationRequest) -> dict:
+    with db_json.DB_LOCK:
+        collection = db_json.DB["software_assets"]
+        installation_id = _normalise(request.installation_id)
+        if any(_normalise(asset.get("installation_id")) == installation_id
+               for asset in collection.values()):
+            raise DuplicateAssetIdentifierError("Software installation identifier already registered")
+
+        asset_id = _generate_asset_id("SW", collection)
+        record = SoftwareAsset(
+            asset_id=asset_id,
+            **request.model_dump(),
+        ).to_dict()
+        collection[asset_id] = record
+        try:
+            db_json.save_db()
+        except Exception:
+            collection.pop(asset_id, None)
+            raise
+        return record
 
 
-def list_hardware():
-    return list(DB["hardware_assets"].values())
+def register_asset(request: HardwareRegistrationRequest | SoftwareRegistrationRequest) -> dict:
+    if isinstance(request, HardwareRegistrationRequest):
+        return register_hardware(request)
+    if isinstance(request, SoftwareRegistrationRequest):
+        return register_software(request)
+    raise TypeError("Unsupported asset request")
+
+
+def get_asset(asset_id: str) -> dict | None:
+    with db_json.DB_LOCK:
+        if asset_id.startswith("HW-"):
+            return db_json.DB["hardware_assets"].get(asset_id)
+        if asset_id.startswith("SW-"):
+            return db_json.DB["software_assets"].get(asset_id)
+        return None
+
+
+def list_assets(category: str | None = None) -> list[dict]:
+    with db_json.DB_LOCK:
+        if category == "Hardware":
+            return list(db_json.DB["hardware_assets"].values())
+        if category == "Software":
+            return list(db_json.DB["software_assets"].values())
+        return list(db_json.DB["hardware_assets"].values()) + list(db_json.DB["software_assets"].values())
