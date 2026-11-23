@@ -1,8 +1,8 @@
-from dataclasses import dataclass
+
 
 from pydantic import BaseModel, EmailStr
 
-@dataclass  
+
 class Employee(BaseModel):
     employee_id: str
     full_name: str

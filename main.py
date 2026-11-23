@@ -3,7 +3,7 @@ from fastapi import FastAPI
 
 from database.db_json import load_db
 from routes.asset import router as asset_router
-
+from routes.employee import router as employee_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,3 +18,4 @@ app = FastAPI(
 )
 
 app.include_router(asset_router)
+app.include_router(employee_router)

@@ -346,3 +346,93 @@ def get_current_asset_assignment(asset_id: str):
             )
 
         return deepcopy(assignment)
+
+    
+def get_employee_active_assignments(employee_id: str) -> list[dict]:
+   
+
+    if not employee_id or not employee_id.strip():
+        raise ValueError("Employee ID is required")
+
+    with db_json.DB_LOCK:
+
+        results = []
+
+       
+        for assignment in db_json.DB["asset_assignments"].values():
+
+            
+            if assignment.get("employee_id") != employee_id:
+                continue
+
+           
+            if assignment.get("status") != "Active":
+                continue
+
+            
+            asset = find_assignment_asset(
+                assignment.get("asset_id")
+            )
+
+            if asset is None:
+                continue
+
+            
+            permitted_asset_details = {
+                "asset_id": asset.get("asset_id"),
+                "title": asset.get("title"),
+                "category": asset.get("category"),
+                "asset_type": asset.get("asset_type"),
+                "location": asset.get("location"),
+                "status": asset.get("status"),
+            }
+
+           
+            employee_assignment = {
+                "assignment_id": assignment.get("assignment_id"),
+                "assignment_date": assignment.get("assignment_date"),
+                "due_date": assignment.get("due_date"),
+                "condition_at_handover": assignment.get(
+                    "condition_at_handover"
+                ),
+                "status": "Active",
+                "asset": permitted_asset_details,
+            }
+
+            results.append(employee_assignment)
+
+        
+        return sorted(
+            results,
+            key=lambda item: item["assignment_date"],
+            reverse=True,
+        )
+
+def get_employee_assets(employee_id: str) -> list[dict]:
+    if not employee_id or not employee_id.strip():
+        raise ValueError("Employee ID is required")
+
+    employee_assets = []
+
+    with db_json.DB_LOCK:
+        for assignment in db_json.DB["asset_assignments"].values():
+
+            if assignment.get("employee_id") != employee_id:
+                continue
+
+            if assignment.get("status") != "Active":
+                continue
+
+            asset = find_assignment_asset(assignment.get("asset_id"))
+
+            if asset is None:
+                continue
+
+            employee_assets.append({
+                "asset_id": asset.get("asset_id"),
+                "title": asset.get("title"),
+                "category": asset.get("category"),
+            })
+
+    return employee_assets
+
